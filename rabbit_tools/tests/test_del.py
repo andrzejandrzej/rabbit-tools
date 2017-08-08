@@ -9,8 +9,8 @@ from rabbit_tools.purge import PurgeQueueTool
 
 
 tested_tools = [
-    param(tool=DelQueueTool, method='delete_queue'),
-    param(tool=PurgeQueueTool, method='purge_queue'),
+    param(tool=DelQueueTool),
+    param(tool=PurgeQueueTool),
 ]
 
 
