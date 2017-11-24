@@ -29,7 +29,7 @@ class RabbitToolBase(object):
     no_queues_affected_msg = NotImplemented
 
     quitting_commands = ['q', 'quit', 'exit', 'e']
-    choose_all_commands = ['all']
+    choose_all_commands = ['a', 'all']
 
     single_choice_regex = re.compile(r'^\d+$')
     range_choice_regex = re.compile(r'^(\d+)[ ]*-[ ]*(\d+)$')
@@ -117,15 +117,25 @@ class RabbitToolBase(object):
             return chosen_queues
 
     def make_single_action(self, queue_name):
-        try:
-            self._method_to_call(self._vhost, queue_name)
-        except HTTPError as e:
-            if e.status == 404:
-                print "Queue {} does not exist.".format(queue_name)
-            else:
-                print "{}: {}".format(self.queue_not_affected_msg, queue_name)
+        if queue_name.lower() == 'all':
+            all_queues = self._get_queue_mapping().values()
+            for queue in all_queues:
+                try:
+                    self._method_to_call(self._vhost, queue)
+                except HTTPError:
+                    print "{}: {}".format(self.queue_not_affected_msg, queue)
+                else:
+                    print "{}: {}.".format(self.queues_affected_msg, queue)
         else:
-            print "{}: {}.".format(self.queues_affected_msg, queue_name)
+            try:
+                self._method_to_call(self._vhost, queue_name)
+            except HTTPError as e:
+                if e.status == 404:
+                    print "Queue {} does not exist.".format(queue_name)
+                else:
+                    print "{}: {}".format(self.queue_not_affected_msg, queue_name)
+            else:
+                print "{}: {}.".format(self.queues_affected_msg, queue_name)
 
     def pick_and_make_action(self, chosen_queues):
         affected_queues = []
@@ -151,10 +161,8 @@ class RabbitToolBase(object):
     def run(self):
         queue_name = self._parsed_args.queue_name
         if queue_name:
-            print '!!!!!!! {}'.format(queue_name)
             self.make_single_action(queue_name)
         else:
-            print 'none'
             chosen_queues = {}
             while chosen_queues is not None:
                 chosen_queues = self._get_users_choice()

@@ -1,5 +1,7 @@
 #!/usr/bin/python
 
+import pkg_resources
+
 from rabbit_tools.base import RabbitToolBase
 
 
