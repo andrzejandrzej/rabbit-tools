@@ -1,8 +1,12 @@
-#!/usr/bin/python
+# -*- coding: utf-8 -*-
 
-import pkg_resources
+import logging
 
 from rabbit_tools.base import RabbitToolBase
+from rabbit_tools.lib import log_exceptions
+
+
+logger = logging.getLogger(__name__)
 
 
 class DelQueueTool(RabbitToolBase):
@@ -26,11 +30,12 @@ class DelQueueTool(RabbitToolBase):
 
 
 def main():
-    del_queue_tool = DelQueueTool()
-    try:
-        del_queue_tool.run()
-    except KeyboardInterrupt:
-        print "Bye"
+    with log_exceptions():
+        del_queue_tool = DelQueueTool()
+        try:
+            del_queue_tool.run()
+        except KeyboardInterrupt:
+            print "Bye"
 
 
 if __name__ == '__main__':

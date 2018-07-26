@@ -14,7 +14,7 @@ setup(
         'console_scripts': [
             'rabdel = rabbit_tools.delete:main',
             'rabpurge = rabbit_tools.purge:main',
-            'rabbit_tools_config = rabbit_tools.config:create_config_file',
+            'rabbit_tools_config = rabbit_tools.config:main',
             'testone = rabbit_tools.delete:main',
             'testtwo = rabbit_tools.delete:main',
         ],

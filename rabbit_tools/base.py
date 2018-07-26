@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import re
 import sys
@@ -9,6 +10,9 @@ from ConfigParser import (
 
 from pyrabbit import Client
 from pyrabbit.http import HTTPError
+
+
+logger = logging.getLogger(__name__)
 
 
 class RabbitToolBase(object):
@@ -60,13 +64,17 @@ class RabbitToolBase(object):
                 pass
             else:
                 return {opt: val for opt, val in config_items}
-        sys.exit('Config file has not been found. Create a "rabbit_tools" config section in "{}" '
-                 'or "{}", or use the "rabbit_tools_config" command'
+        sys.exit('Config file has not been found. Use the "rabbit_tools_config" command'
                  ' to generate it.'.format(self.config_dirs[0], self.config_dirs[1]))
 
-    def _get_client(self, api_url, user, passwd, **kwargs):
-        cl = Client(api_url, user, passwd)
+    def _get_client(self, host, port, user, password, **kwargs):
+        api_url = self._get_api_url(host, port)
+        cl = Client(api_url, user, password)
         return cl
+
+    @staticmethod
+    def _get_api_url(host, port):
+        return '{0}:{1}'.format(host, str(port))
 
     def _get_queue_mapping(self):
         queue_names = [x['name'] for x in self.client.get_queues(self._vhost)]
@@ -88,12 +96,12 @@ class RabbitToolBase(object):
             if parsed_input:
                 wrong_numbers = [str(x) for x in parsed_input if x not in mapping]
                 if wrong_numbers:
-                    print "Wrong choice: {}.".format(', '.join(wrong_numbers))
+                    logger.error("Wrong choice: %s.", ', '.join(wrong_numbers))
                 result = {nr: mapping[nr] for nr in parsed_input if nr in mapping}
                 if result:
                     return result
         else:
-            print 'No more queues to choose.'
+            logger.info('No more queues to choose.')
             return None
 
     def _parse_input(self, user_input):
@@ -123,19 +131,19 @@ class RabbitToolBase(object):
                 try:
                     self._method_to_call(self._vhost, queue)
                 except HTTPError:
-                    print "{}: {}".format(self.queue_not_affected_msg, queue)
+                    logger.error("Queue not affected due to HTTP Error: %r.", queue)
                 else:
-                    print "{}: {}.".format(self.queues_affected_msg, queue)
+                    logger.info("%s: %r.", self.queues_affected_msg, queue_name)
         else:
             try:
                 self._method_to_call(self._vhost, queue_name)
             except HTTPError as e:
                 if e.status == 404:
-                    print "Queue {} does not exist.".format(queue_name)
+                    logger.error("Queue %r does not exist.", queue_name)
                 else:
-                    print "{}: {}".format(self.queue_not_affected_msg, queue_name)
+                    logger.error("%s: %r.", self.queue_not_affected_msg, queue_name)
             else:
-                print "{}: {}.".format(self.queues_affected_msg, queue_name)
+                logger.info("%s: %r.", self.queues_affected_msg, queue_name)
 
     def pick_and_make_action(self, chosen_queues):
         affected_queues = []
@@ -145,17 +153,17 @@ class RabbitToolBase(object):
                 self._method_to_call(self._vhost, queue_name)
             except HTTPError as e:
                 if e.status == 404:
-                    print "Queue {} does not exist.".format(queue_name)
+                    logger.error("Queue %r does not exist.", queue_name)
                     chosen_numbers.append(queue_number)
                 else:
-                    print "{}: {}.".format(self.queue_not_affected_msg, queue_name)
+                    logger.info("%s: %r.", self.queue_not_affected_msg, queue_name)
             else:
                 affected_queues.append(queue_name)
                 chosen_numbers.append(queue_number)
         if affected_queues:
-            print "{}: {}.".format(self.queues_affected_msg, ', '.join(affected_queues))
+            logger.info("%s: %s.", self.queues_affected_msg, ', '.join(affected_queues))
         else:
-            print self.no_queues_affected_msg
+            logger.warning(self.no_queues_affected_msg)
         return chosen_numbers
 
     def run(self):
