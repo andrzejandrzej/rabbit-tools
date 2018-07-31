@@ -1,6 +1,10 @@
-#!/usr/bin/python
+import logging
 
 from rabbit_tools.base import RabbitToolBase
+from rabbit_tools.lib import log_exceptions
+
+
+logger = logging.getLogger(__name__)
 
 
 class PurgeQueueTool(RabbitToolBase):
@@ -22,11 +26,12 @@ class PurgeQueueTool(RabbitToolBase):
 
 
 def main():
-    purge_queue_tool = PurgeQueueTool()
-    try:
-        purge_queue_tool.run()
-    except KeyboardInterrupt:
-        print "Bye"
+    with log_exceptions():
+        purge_queue_tool = PurgeQueueTool()
+        try:
+            purge_queue_tool.run()
+        except KeyboardInterrupt:
+            print "Bye"
 
 
 if __name__ == '__main__':

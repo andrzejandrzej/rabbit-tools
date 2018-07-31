@@ -115,6 +115,8 @@ class TestRabbitTools(unittest.TestCase):
         '  12-19   ',
     ]
 
+    logger_patch = patch('rabbit_tools.base.logger')
+
     def setUp(self):
         self._tested_tool = self.tool.__new__(self.tool)
         self._tested_tool.config = MagicMock()
@@ -140,15 +142,20 @@ class TestRabbitTools(unittest.TestCase):
 
     @foreach(choose_queues_input_to_expected_output)
     def test__choose_queues(self, user_input, expected_result):
-        with patch('__builtin__.raw_input', return_value=user_input):
+        with patch('__builtin__.raw_input', return_value=user_input),\
+                self.logger_patch as log_moc:
             result = self._tested_tool._choose_queues(self.sample_mapping)
+            self.assertFalse(log_moc.called)
         self.assertIsInstance(result, MutableMapping)
         self.assertItemsEqual(expected_result, result)
 
     @foreach(choose_queues_wrong_inputs)
     def test__choose_queues_wrong_inputs(self, first_val):
-        with patch('__builtin__.raw_input', side_effect=[first_val, '1']):
+        with patch('__builtin__.raw_input', side_effect=[first_val, '1']),\
+                self.logger_patch as log_moc:
             result = self._tested_tool._choose_queues(self.sample_mapping)
+            # self.assertTrue(log_moc.error.called)
+            # log_moc.error.assert_called_with('***')
         self.assertIsInstance(result, MutableMapping)
         self.assertItemsEqual({1: 'queue1'}, result)
 
@@ -170,9 +177,10 @@ class TestRabbitTools(unittest.TestCase):
         self.assertIsNone(result)
 
     def test_queue_from_args(self):
-        self._tested_tool._parsed_args.queue_name = sentinel.queue
+        sample_queue_name = 'some queue'
+        self._tested_tool._parsed_args.queue_name = sample_queue_name
         self._tested_tool.run()
-        self._tested_tool._method_to_call.assert_called_with(sentinel.vhost, sentinel.queue)
+        self._tested_tool._method_to_call.assert_called_with(sentinel.vhost, sample_queue_name)
 
     def test_queue_chosen_by_user(self):
         self._tested_tool._parsed_args.queue_name = None

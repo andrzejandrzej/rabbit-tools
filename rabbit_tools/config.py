@@ -16,15 +16,7 @@ from rabbit_tools.lib import (
 )
 
 
-DEFAULT_CONFIG = '''[rabbit_tools]
-api_url = 127.0.0.1:15672
-user = guest
-passwd = guest
-vhost = /'''
-
 CONFIG_FILENAME = 'rabbit_tools.conf'
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -83,21 +75,50 @@ class ConfigCreator(object):
         self._config.add_section('rabbit_tools')
         for opt in self.rabbit_tools_section:
             self._config.set('rabbit_tools', opt, getattr(self._parsed_args, opt))
-        print self._config.items('rabbit_tools')
-        self._config.add_section('loggers')
-        self._config.add_section('handlers')
-        self._config.add_section('formatters')
-        self._config.add_section('fff')
+        joined_handlers = ','.join(self.handlers)
+        joined_formatters = ','.join(self.formatters)
+        self._write_loggers(joined_handlers)
+        self._write_handlers(joined_handlers)
+        self._write_formatters(joined_formatters)
 
-    @staticmethod
-    def _make_config_file(dir_path):
+    def _write_loggers(self, handlers):
+        self._config.add_section('loggers')
+        self._config.set('loggers', 'keys', 'root')
+        self._config.add_section('logger_root')
+        self._config.set('logger_root', 'level', 'INFO')
+        self._config.set('logger_root', 'handlers', handlers)
+
+    def _write_handlers(self, handlers):
+        self._config.add_section('handlers')
+        self._config.set('handlers', 'keys', handlers)
+        self._config.add_section('handler_simple')
+        self._config.set('handler_simple', 'level', 'NOTSET')
+        self._config.set('handler_simple', 'class', 'StreamHandler')
+        self._config.set('handler_simple', 'formatter', 'simple')
+        self._config.set('handler_simple', 'args', '()')
+        self._config.add_section('handler_syslog')
+        self._config.set('handler_syslog', 'level', 'NOTSET')
+        self._config.set('handler_syslog', 'class', 'logging.handlers.SysLogHandler')
+        self._config.set('handler_syslog', 'formatter', 'full')
+        self._config.set('handler_syslog', 'args', "('/dev/log',)")
+
+    def _write_formatters(self, formatters):
+        self._config.add_section('formatters')
+        self._config.set('formatters', 'keys', formatters)
+        self._config.add_section('formatter_full')
+        self._config.set('formatter_full', 'format',
+                         '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        self._config.add_section('formatter_simple')
+        self._config.set('formatter_simple', 'format', '%(levelname)s - %(message)s')
+
+    def _make_config_file(self, dir_path):
         config_file = os.path.join(dir_path, CONFIG_FILENAME)
         if os.path.exists(config_file):
             if not answer_yes_no("Config file already exists, do you want to overwrite it?"):
                 return True
         try:
             with open(config_file, 'w') as open_config:
-                open_config.write(DEFAULT_CONFIG)
+                self._config.write(open_config)
         except IOError as e:
             if e.errno == errno.EACCES:
                 logger.error("No permission to write to: %r.", config_file)

@@ -28,9 +28,9 @@ class RabbitToolBase(object):
 
     client_method_name = NotImplemented
 
-    queue_not_affected_msg = NotImplemented
-    queues_affected_msg = NotImplemented
-    no_queues_affected_msg = NotImplemented
+    queue_not_affected_msg = 'Queue not affected'
+    queues_affected_msg = 'Queues affected'
+    no_queues_affected_msg = 'No queues have been affected.'
 
     quitting_commands = ['q', 'quit', 'exit', 'e']
     choose_all_commands = ['a', 'all']
@@ -97,9 +97,12 @@ class RabbitToolBase(object):
                 wrong_numbers = [str(x) for x in parsed_input if x not in mapping]
                 if wrong_numbers:
                     logger.error("Wrong choice: %s.", ', '.join(wrong_numbers))
+                    continue
                 result = {nr: mapping[nr] for nr in parsed_input if nr in mapping}
                 if result:
                     return result
+            else:
+                logger.error('Input could not be parsed.')
         else:
             logger.info('No more queues to choose.')
             return None
