@@ -12,7 +12,7 @@ class PurgeQueueTool(RabbitToolBase):
     args = {
         'queue_name': {
             'help': 'Name of a queue to purge.',
-            'nargs': '?',
+            'nargs': '*',
         },
     }
     description = ('Purge an AMQP queue. Do not pass a queue\'s name as an argument, '

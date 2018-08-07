@@ -144,7 +144,7 @@ class TestRabbitTools(unittest.TestCase):
     def test__choose_queues(self, user_input, expected_result):
         with patch('__builtin__.raw_input', return_value=user_input),\
                 self.logger_patch as log_moc:
-            result = self._tested_tool._choose_queues(self.sample_mapping)
+            result = self._tested_tool._get_valid_numbers(self.sample_mapping)
             self.assertFalse(log_moc.called)
         self.assertIsInstance(result, MutableMapping)
         self.assertItemsEqual(expected_result, result)
@@ -153,7 +153,7 @@ class TestRabbitTools(unittest.TestCase):
     def test__choose_queues_wrong_inputs(self, first_val):
         with patch('__builtin__.raw_input', side_effect=[first_val, '1']),\
                 self.logger_patch as log_moc:
-            result = self._tested_tool._choose_queues(self.sample_mapping)
+            result = self._tested_tool._get_valid_numbers(self.sample_mapping)
             # self.assertTrue(log_moc.error.called)
             # log_moc.error.assert_called_with('***')
         self.assertIsInstance(result, MutableMapping)
@@ -173,7 +173,7 @@ class TestRabbitTools(unittest.TestCase):
     @foreach(['q', 'Q', 'QUIT', 'quit', 'QuIt', '  eXit    ', ' e', 'E  '])
     def test_quit_command(self, command):
         with patch('__builtin__.raw_input', return_value=command):
-            result = self._tested_tool._choose_queues(self.sample_mapping)
+            result = self._tested_tool._get_valid_numbers(self.sample_mapping)
         self.assertIsNone(result)
 
     def test_queue_from_args(self):

@@ -14,7 +14,7 @@ class DelQueueTool(RabbitToolBase):
     args = {
         'queue_name': {
             'help': 'Name of a queue to delete.',
-            'nargs': '?',
+            'nargs': '*',
         },
     }
     description = ('Delete an AMQP queue. Do not pass a queue\'s name as an argument, '
@@ -27,6 +27,8 @@ class DelQueueTool(RabbitToolBase):
     queue_not_affected_msg = "Cannot delete queue"
     queues_affected_msg = "Successfully deleted queues"
     no_queues_affected_msg = "No queues have been deleted."
+
+    do_remove_chosen_numbers = True
 
 
 def main():

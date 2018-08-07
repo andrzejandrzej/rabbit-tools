@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import sys
+from collections import Sequence
 from ConfigParser import (
     NoSectionError,
     SafeConfigParser,
@@ -13,6 +14,12 @@ from pyrabbit.http import HTTPError
 
 
 logger = logging.getLogger(__name__)
+
+
+class StopReceivingInput(Exception):
+    """
+    Raised when no queues are left, or user typed a quitting command.
+    """
 
 
 class RabbitToolBase(object):
@@ -34,6 +41,10 @@ class RabbitToolBase(object):
 
     quitting_commands = ['q', 'quit', 'exit', 'e']
     choose_all_commands = ['a', 'all']
+
+    # set to True, if queues are deleted after an action,
+    # and the associated number should not be shown anymore
+    do_remove_chosen_numbers = False
 
     single_choice_regex = re.compile(r'^\d+$')
     range_choice_regex = re.compile(r'^(\d+)[ ]*-[ ]*(\d+)$')
@@ -76,38 +87,37 @@ class RabbitToolBase(object):
     def _get_api_url(host, port):
         return '{0}:{1}'.format(host, str(port))
 
-    def _get_queue_mapping(self):
-        queue_names = [x['name'] for x in self.client.get_queues(self._vhost)]
-        full_range = range(1, len(queue_names) + len(self._chosen_numbers) + 1)
-        cleared_range = set(full_range) - self._chosen_numbers
-        return dict(zip(cleared_range, queue_names))
+    def _yield_queue_list(self):
+        return (x['name'] for x in self.client.get_queues(self._vhost))
 
-    def _choose_queues(self, mapping):
-        while mapping:
+    def _get_queue_mapping(self):
+        queue_names = list(self._yield_queue_list())
+        if not queue_names:
+            raise StopReceivingInput
+        full_range = range(1, len(queue_names) + len(self._chosen_numbers) + 1)
+        if self.do_remove_chosen_numbers:
+            output_range = set(full_range) - self._chosen_numbers
+        else:
+            output_range = full_range
+        return dict(zip(output_range, queue_names))
+
+    @staticmethod
+    def _get_user_input(mapping):
+        if mapping:
             for nr, queue in mapping.iteritems():
                 print '[{}] {}'.format(nr, queue)
             user_input = raw_input("Queue number ('all' to choose all / 'q' to quit'): ")
             user_input = user_input.strip().lower()
-            if user_input in self.quitting_commands:
-                return None
-            if user_input in self.choose_all_commands:
-                return mapping
-            parsed_input = self._parse_input(user_input)
-            if parsed_input:
-                wrong_numbers = [str(x) for x in parsed_input if x not in mapping]
-                if wrong_numbers:
-                    logger.error("Wrong choice: %s.", ', '.join(wrong_numbers))
-                    continue
-                result = {nr: mapping[nr] for nr in parsed_input if nr in mapping}
-                if result:
-                    return result
-            else:
-                logger.error('Input could not be parsed.')
+            return user_input
         else:
             logger.info('No more queues to choose.')
-            return None
+            raise StopReceivingInput
 
     def _parse_input(self, user_input):
+        if user_input in self.quitting_commands:
+            raise StopReceivingInput
+        if user_input in self.choose_all_commands:
+            return 'all'
         single_choice = self.single_choice_regex.search(user_input)
         if single_choice:
             return [int(single_choice.group(0))]
@@ -118,37 +128,44 @@ class RabbitToolBase(object):
         if multi_choice:
             raw_numbers = multi_choice.group(0)
             return map(int, self.multi_choice_inner_regex.findall(raw_numbers))
+        logger.error('Input could not be parsed.')
         return None
 
-    def _get_users_choice(self):
-            numbers_to_queue_names = self._get_queue_mapping()
-            chosen_queues = self._choose_queues(numbers_to_queue_names)
-            if chosen_queues is None:
-                return None
-            return chosen_queues
+    @staticmethod
+    def _validate_numbers(mapping, parsed_input):
+        wrong_numbers = [str(x) for x in parsed_input if x not in mapping]
+        if wrong_numbers:
+            logger.error("Wrong choice: %s.", ', '.join(wrong_numbers))
+            return False
+        return True
 
-    def make_single_action(self, queue_name):
-        if queue_name.lower() == 'all':
-            all_queues = self._get_queue_mapping().values()
-            for queue in all_queues:
-                try:
-                    self._method_to_call(self._vhost, queue)
-                except HTTPError:
-                    logger.error("Queue not affected due to HTTP Error: %r.", queue)
-                else:
-                    logger.info("%s: %r.", self.queues_affected_msg, queue_name)
+    def _get_chosen_queues_mapping(self, mapping, parsed_input):
+        if isinstance(parsed_input, Sequence) and self._validate_numbers(mapping, parsed_input):
+            return {nr: mapping[nr] for nr in parsed_input}
+        elif parsed_input == 'all':
+            return mapping
+        return None
+
+    def make_action_from_args(self, all_queues, queue_names):
+        if len(queue_names) == 1 and queue_names[0] in self.choose_all_commands:
+            chosen_queues = all_queues
         else:
+            chosen_queues = queue_names
+        affected_queues = []
+        for queue in chosen_queues:
             try:
-                self._method_to_call(self._vhost, queue_name)
+                self._method_to_call(self._vhost, queue)
             except HTTPError as e:
                 if e.status == 404:
-                    logger.error("Queue %r does not exist.", queue_name)
+                    logger.error("Queue %r does not exist.", queue)
                 else:
-                    logger.error("%s: %r.", self.queue_not_affected_msg, queue_name)
+                    logger.warning("%s: %r.", self.queue_not_affected_msg, queue)
             else:
-                logger.info("%s: %r.", self.queues_affected_msg, queue_name)
+                affected_queues.append(queue)
+        else:
+            logger.info("%s: %s", self.queues_affected_msg, ', '.join(affected_queues))
 
-    def pick_and_make_action(self, chosen_queues):
+    def make_action(self, chosen_queues):
         affected_queues = []
         chosen_numbers = []
         for queue_number, queue_name in chosen_queues.iteritems():
@@ -159,7 +176,7 @@ class RabbitToolBase(object):
                     logger.error("Queue %r does not exist.", queue_name)
                     chosen_numbers.append(queue_number)
                 else:
-                    logger.info("%s: %r.", self.queue_not_affected_msg, queue_name)
+                    logger.warning("%s: %r.", self.queue_not_affected_msg, queue_name)
             else:
                 affected_queues.append(queue_name)
                 chosen_numbers.append(queue_number)
@@ -170,14 +187,21 @@ class RabbitToolBase(object):
         return chosen_numbers
 
     def run(self):
-        queue_name = self._parsed_args.queue_name
-        if queue_name:
-            self.make_single_action(queue_name)
+        queue_names = self._parsed_args.queue_name
+        if queue_names:
+            all_queues = self._yield_queue_list()
+            self.make_action_from_args(all_queues, queue_names)
         else:
-            chosen_queues = {}
-            while chosen_queues is not None:
-                chosen_queues = self._get_users_choice()
-                if chosen_queues:
-                    self._chosen_numbers.update(self.pick_and_make_action(chosen_queues))
-            else:
-                print 'bye'
+            while True:
+                try:
+                    mapping = self._get_queue_mapping()
+                    user_input = self._get_user_input(mapping)
+                    parsed_input = self._parse_input(user_input)
+                except StopReceivingInput:
+                    print 'bye'
+                    break
+                if parsed_input:
+                    chosen_queues_mapping = self._get_chosen_queues_mapping(mapping,
+                                                                            parsed_input)
+                    if chosen_queues_mapping:
+                        self._chosen_numbers.update(self.make_action(chosen_queues_mapping))
