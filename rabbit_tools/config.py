@@ -6,7 +6,10 @@ from argparse import (
     ArgumentDefaultsHelpFormatter,
     ArgumentParser,
 )
-from ConfigParser import SafeConfigParser
+from ConfigParser import (
+    NoSectionError,
+    SafeConfigParser,
+)
 
 from rabbit_tools.lib import (
     answer_yes_no,
@@ -18,6 +21,10 @@ from rabbit_tools.lib import (
 
 CONFIG_FILENAME = 'rabbit_tools.conf'
 logger = logging.getLogger(__name__)
+
+
+class ConfigFileMissingException(Exception):
+    """Raised when no config file was found."""
 
 
 class ConfigCreator(object):
@@ -153,6 +160,35 @@ class ConfigCreator(object):
                 logger.info("Could not write config file to: %r, using: %r.", ETC_DIR, HOME_DIR)
                 if not self._make_dir(HOME_DIR) or not self._make_config_file(HOME_DIR):
                     sys.exit("Failed to write a config file.")
+
+
+class Config(object):
+
+    def __new__(cls, *args, **kwargs):
+        self = super(Config, cls).__new__(cls)
+        self.__init__(*args, **kwargs)
+        return self._get_config()
+
+    def __init__(self, config_section):
+        self._config_section = config_section
+        self._config_parser = SafeConfigParser()
+        config_dirs = [
+            ETC_DIR,
+            HOME_DIR,
+        ]
+        config_paths = [os.path.join(conf_dir, CONFIG_FILENAME) for conf_dir in config_dirs]
+        for config_path in config_paths:
+            self._config_parser.read(config_path)
+        self.config = self._get_config()
+
+    def _get_config(self):
+        try:
+            config_items = self._config_parser.items(self._config_section)
+        except NoSectionError:
+            pass
+        else:
+            return {opt: val for opt, val in config_items}
+        raise ConfigFileMissingException
 
 
 def main():

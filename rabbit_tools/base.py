@@ -4,13 +4,14 @@ import os
 import re
 import sys
 from collections import Sequence
-from ConfigParser import (
-    NoSectionError,
-    SafeConfigParser,
-)
 
 from pyrabbit import Client
 from pyrabbit.http import HTTPError
+
+from rabbit_tools.config import (
+    Config,
+    ConfigFileMissingException,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -25,10 +26,6 @@ class StopReceivingInput(Exception):
 class RabbitToolBase(object):
 
     config_section = 'rabbit_tools'
-    config_dirs = [
-        '/etc/rabbit_tools/rabbit_tools.conf',
-        os.path.expanduser('~/.rabbit_tools/rabbit_tools.conf'),
-    ]
 
     description = NotImplemented
     args = NotImplemented
@@ -52,7 +49,11 @@ class RabbitToolBase(object):
     multi_choice_inner_regex = re.compile(r'\b(\d+)\b')
 
     def __init__(self):
-        self.config = self._get_config()
+        try:
+            self.config = Config(self.config_section)
+        except ConfigFileMissingException:
+            sys.exit('Config file has not been found. Use the "rabbit_tools_config" command'
+                     ' to generate it.')
         self._parsed_args = self._get_parsed_args()
         self._vhost = self.config['vhost']
         self.client = self._get_client(**self.config)
@@ -64,19 +65,6 @@ class RabbitToolBase(object):
         for arg_name, arg_opts in self.args.iteritems():
             parser.add_argument(arg_name, **arg_opts)
         return parser.parse_args()
-
-    def _get_config(self):
-        config_parser = SafeConfigParser()
-        for config_dir in self.config_dirs:
-            config_parser.read(config_dir)
-            try:
-                config_items = config_parser.items(self.config_section)
-            except NoSectionError:
-                pass
-            else:
-                return {opt: val for opt, val in config_items}
-        sys.exit('Config file has not been found. Use the "rabbit_tools_config" command'
-                 ' to generate it.'.format(self.config_dirs[0], self.config_dirs[1]))
 
     def _get_client(self, host, port, user, password, **kwargs):
         api_url = self._get_api_url(host, port)
