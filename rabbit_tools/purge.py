@@ -9,12 +9,6 @@ logger = logging.getLogger(__name__)
 
 class PurgeQueueTool(RabbitToolBase):
 
-    args = {
-        'queue_name': {
-            'help': 'Name of a queue to purge.',
-            'nargs': '*',
-        },
-    }
     description = ('Purge an AMQP queue. Do not pass a queue\'s name as an argument, '
                    'if you want to choose it from the list.')
 

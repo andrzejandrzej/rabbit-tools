@@ -11,12 +11,6 @@ logger = logging.getLogger(__name__)
 
 class DelQueueTool(RabbitToolBase):
 
-    args = {
-        'queue_name': {
-            'help': 'Name of a queue to delete.',
-            'nargs': '*',
-        },
-    }
     description = ('Delete an AMQP queue. Do not pass a queue\'s name as an argument, '
                    'if you want to choose it from the list. You can use choose a single queue '
                    'from dynamically generated list or enter a range (two numbers separated by'

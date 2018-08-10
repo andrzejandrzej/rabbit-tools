@@ -1,6 +1,5 @@
 import argparse
 import logging
-import os
 import re
 import sys
 from collections import Sequence
@@ -25,12 +24,86 @@ class StopReceivingInput(Exception):
 
 class RabbitToolBase(object):
 
+    """
+    Base class providing AMQP communication, parsing of user input
+    and applying some action to chosen queues. Tools implemented
+    by concrete classes give user a faster (and probably more
+    convenient) way to manipulate AMQP queues, than GUI, API
+    or other command line tools, provided with RabbitMQ.
+
+    Concrete classes provide, most of all, a method of client
+    instance, which will be used to manipulate chosen queues.
+
+    Subclasses of the class have to implement attributes:
+        * description (str) - description of the tool, which
+          will be shown inside of script's help (run with
+          -h argument);
+        * client_method_name (str) - name of a method of PyRabbit's
+          client instance, which will be used to manipulate queues.
+
+    Other attributes, that may be overridden in a subclass:
+        * do_remove_chosen_numbers (bool) - set to True, if it is
+          expected, that successfully manipulated queues will
+          disappear from the list, and numbers associated with
+          them should not be bound to other names to avoid
+          wrong selections (like in case of deleting queues);
+
+        * queue_not_affected_msg (str) - message to log, when
+          an action was unsuccessful for a current queue;
+        * queues_affected_msg (str) - message to log, to show,
+          which queues were successfully affected by an action;
+        * no_queues_affected_msg (str) - message logged, when
+          there was no success with any of chosen queues;
+
+        Note that some messages end with dot, other not, because
+        they are formatted differently. If not overridden in
+        a subclass, default messages will be logged.
+
+    ** Usage
+    There are two ways of using Rabbit Tools. The first is to
+    pass a known queue name or many queue names, separated by
+    space, or "all" string, to choose all queues. The other way
+    is to run a tool with no arguments, so current list of queues
+    will be shown and it will wait for input from user. Each
+    queue has a number associated with it, so in this mode user
+    should choose queues using these numbers.
+
+    Additional comfort of usage comes from:
+      * using the config file, so there is no need to define every
+        time options like API address or user credentials;
+      * ability to choose ranges of queue numbers.
+
+    ** Choosing queues in the interactive mode:
+    In this mode a tool runs in a loop, until user quits or there
+    are no queues left. In each iteration of the loop, the list
+    of available queues is shown, each queue has a number assigned,
+    so user inputs proper number, not a whole name. Input can be
+    a single number, list of numbers or range.
+    In the list of numbers, each number should be separated by
+    space, comma or space and comma (number of spaces does not
+    matter, there can be more than one, before and after the
+    comma):
+        1, 2 3 , 4 (will chose numbers: 1, 2, 3, 4)
+    The range of numbers is presented as two numbers (beginning
+    of the range and its end) separated by dash (-). Numbers and
+    the symbol of dash can be separated by one or more spaces:
+        2 - 5 (will chose: 2, 3, 4, 5)
+    IMPORTANT: list and range of numbers should not be mixed
+    in one input.
+    """
+
     config_section = 'rabbit_tools'
 
-    description = NotImplemented
-    args = NotImplemented
-
     client_method_name = NotImplemented
+    description = NotImplemented
+
+    args = {
+        'queue_name': {
+            'help': 'Name of one or more queues (seperated by space) / '
+                    '"all" to choose all queues.',
+            'nargs': '*',
+        },
+    }
 
     queue_not_affected_msg = 'Queue not affected'
     queues_affected_msg = 'Queues affected'
@@ -45,7 +118,7 @@ class RabbitToolBase(object):
 
     single_choice_regex = re.compile(r'^\d+$')
     range_choice_regex = re.compile(r'^(\d+)[ ]*-[ ]*(\d+)$')
-    multi_choice_regex = re.compile(r'^(\d+)[ ]*,[ ]*((\d+)[ ]*,[ ]*)*((\d+)[ ]*,?)$')
+    multi_choice_regex = re.compile(r'^((\d+)*[ ]*,?[ ]*){2,}$')
     multi_choice_inner_regex = re.compile(r'\b(\d+)\b')
 
     def __init__(self):
@@ -120,16 +193,13 @@ class RabbitToolBase(object):
         return None
 
     @staticmethod
-    def _validate_numbers(mapping, parsed_input):
-        wrong_numbers = [str(x) for x in parsed_input if x not in mapping]
-        if wrong_numbers:
-            logger.error("Wrong choice: %s.", ', '.join(wrong_numbers))
-            return False
-        return True
-
-    def _get_chosen_queues_mapping(self, mapping, parsed_input):
-        if isinstance(parsed_input, Sequence) and self._validate_numbers(mapping, parsed_input):
-            return {nr: mapping[nr] for nr in parsed_input}
+    def _get_selected_mapping(mapping, parsed_input):
+        if isinstance(parsed_input, Sequence):
+            selected_mapping = {nr: mapping[nr] for nr in parsed_input if nr in mapping}
+            if not selected_mapping:
+                logger.error('No queues were selected.')
+                return None
+            return selected_mapping
         elif parsed_input == 'all':
             return mapping
         return None
@@ -189,7 +259,6 @@ class RabbitToolBase(object):
                     print 'bye'
                     break
                 if parsed_input:
-                    chosen_queues_mapping = self._get_chosen_queues_mapping(mapping,
-                                                                            parsed_input)
-                    if chosen_queues_mapping:
-                        self._chosen_numbers.update(self.make_action(chosen_queues_mapping))
+                    selected_mapping = self._get_selected_mapping(mapping, parsed_input)
+                    if selected_mapping:
+                        self._chosen_numbers.update(self.make_action(selected_mapping))
