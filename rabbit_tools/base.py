@@ -132,6 +132,7 @@ class RabbitToolBase(object):
         self.client = self._get_client(**self.config)
         self._method_to_call = getattr(self.client, self.client_method_name)
         self._chosen_numbers = set()
+        self._all_queues_indicator = object()
 
     def _get_parsed_args(self):
         parser = argparse.ArgumentParser(description=self.description)
@@ -155,11 +156,11 @@ class RabbitToolBase(object):
         queue_names = list(self._yield_queue_list())
         if not queue_names:
             raise StopReceivingInput
-        full_range = range(1, len(queue_names) + len(self._chosen_numbers) + 1)
         if self.do_remove_chosen_numbers:
+            full_range = range(1, len(queue_names) + len(self._chosen_numbers) + 1)
             output_range = set(full_range) - self._chosen_numbers
         else:
-            output_range = full_range
+            output_range = range(1, len(queue_names) + 1)
         return dict(zip(output_range, queue_names))
 
     @staticmethod
@@ -178,7 +179,7 @@ class RabbitToolBase(object):
         if user_input in self.quitting_commands:
             raise StopReceivingInput
         if user_input in self.choose_all_commands:
-            return 'all'
+            return self._all_queues_indicator
         single_choice = self.single_choice_regex.search(user_input)
         if single_choice:
             return [int(single_choice.group(0))]
@@ -192,15 +193,14 @@ class RabbitToolBase(object):
         logger.error('Input could not be parsed.')
         return None
 
-    @staticmethod
-    def _get_selected_mapping(mapping, parsed_input):
+    def _get_selected_mapping(self, mapping, parsed_input):
         if isinstance(parsed_input, Sequence):
             selected_mapping = {nr: mapping[nr] for nr in parsed_input if nr in mapping}
             if not selected_mapping:
                 logger.error('No queues were selected.')
                 return None
             return selected_mapping
-        elif parsed_input == 'all':
+        elif parsed_input == self._all_queues_indicator:
             return mapping
         return None
 
