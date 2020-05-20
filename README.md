@@ -1,5 +1,5 @@
 # rabbit-tools
-A working title of tools for convenient administration of RabbitMQ queues.
+A set of tools for convenient administration of RabbitMQ queues.
 
 ## Getting Started
 
